@@ -1,61 +1,207 @@
+//#include <boost/spirit/home/x3.hpp>
+//#include <iostream>
+//#include <string>
+//
+//namespace x3 = boost::spirit::x3;
+//namespace ascii = boost::spirit::x3::ascii;
+//
+//using x3::double_;
+//using ascii::space;
+//using x3::_attr;
+//
+//template <typename Iterator>
+//bool adder(Iterator first, Iterator last, double& n)
+//{
+//    auto assign = [&](auto& ctx) { n = _attr(ctx); };
+//    auto add = [&](auto& ctx) { n += _attr(ctx); };
+//
+//    bool r = x3::phrase_parse(first, last,
+//
+//        //  Begin grammar
+//        (
+//            double_[assign] >> *(',' >> double_[add])
+//            )
+//        ,
+//        //  End grammar
+//
+//        space);
+//
+//    if (first != last) // fail if we did not get a full match
+//        return false;
+//    return r;
+//}
+//
+//int main()
+//{
+//    std::cout << "/////////////////////////////////////////////////////////\n\n";
+//    std::cout << "\t\tA parser for summing a list of numbers...\n\n";
+//    std::cout << "/////////////////////////////////////////////////////////\n\n";
+//
+//    std::cout << "Give me a comma separated list of numbers.\n";
+//    std::cout << "The numbers are added using Phoenix.\n";
+//    std::cout << "Type [q or Q] to quit\n\n";
+//
+//    std::string str;
+//    while (getline(std::cin, str))
+//    {
+//        if (str.empty() || str[0] == 'q' || str[0] == 'Q')
+//            break;
+//
+//        double n;
+//        if (adder(str.begin(), str.end(), n))
+//        {
+//            std::cout << "-------------------------\n";
+//            std::cout << "Parsing succeeded\n";
+//            std::cout << str << " Parses OK: " << std::endl;
+//
+//            std::cout << "sum = " << n;
+//            std::cout << "\n-------------------------\n";
+//        }
+//        else
+//        {
+//            std::cout << "-------------------------\n";
+//            std::cout << "Parsing failed\n";
+//            std::cout << "-------------------------\n";
+//        }
+//    }
+//
+//    std::cout << "Bye... :-) \n\n";
+//    return 0;
+//}
+
+/*=============================================================================
+    Copyright (c) 2002-2015 Joel de Guzman
+
+    Distributed under the Boost Software License, Version 1.0. (See accompanying
+    file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+=============================================================================*/
+///////////////////////////////////////////////////////////////////////////////
+//
+//  A parser for arbitrary tuples. This example presents a parser
+//  for an employee structure.
+//
+//  [ JDG May 9, 2007 ]
+//  [ JDG May 13, 2015 ]    spirit X3
+//
+///////////////////////////////////////////////////////////////////////////////
+
+#include <boost/config/warning_disable.hpp>
+#include <boost/spirit/home/x3.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
+#include <boost/fusion/include/io.hpp>
+
 #include <iostream>
-#include <boost/filesystem.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
+#include <string>
 
-using namespace std;
+namespace client {
+    namespace ast
+    {
+        ///////////////////////////////////////////////////////////////////////////
+        //  Our employee struct
+        ///////////////////////////////////////////////////////////////////////////
+        struct employee
+        {
+            int age;
+            std::string forename;
+            std::string surname;
+            double salary;
+        };
 
-namespace fs = boost::filesystem;
-namespace pt = boost::property_tree;
-
-void json() {
-	pt::ptree root;
-	pt::read_json("data.json", root);
-	cout << root.get<string>("some.complex.path");
+        using boost::fusion::operator<<;
+    }
 }
 
-void file_system() {
-	fs::path p(fs::current_path());
+// We need to tell fusion about our employee struct
+// to make it a first-class fusion citizen. This has to
+// be in global scope.
 
-	try
-	{
-		if (exists(p))
-		{
-			if (is_regular_file(p))
-				cout << p << " size is " << file_size(p) << '\n';
+BOOST_FUSION_ADAPT_STRUCT(client::ast::employee,
+    age, forename, surname, salary
+)
 
-			else if (is_directory(p))
-			{
-				cout << p << " is a directory containing:\n";
-
-				for (const fs::directory_entry& x : fs::directory_iterator(p))
-					cout << "    " << x.path().generic_path() << '\n';
-			}
-			else
-				cout << p << " exists, but is not a regular file or directory\n";
-		}
-		else
-			cout << p << " does not exist\n";
-	}
-
-	catch (const fs::filesystem_error & ex)
-	{
-		cout << ex.what() << '\n';
-	}
-}
-
-int main(int argc, char* argv[])
+namespace client
 {
-	cout << "json" << endl;
-	json();
-	cout << endl;
-	cout << endl;
+    ///////////////////////////////////////////////////////////////////////////////
+    //  Our employee parser
+    ///////////////////////////////////////////////////////////////////////////////
+    namespace parser
+    {
+        namespace x3 = boost::spirit::x3;
+        namespace ascii = boost::spirit::x3::ascii;
 
-	cout << "file system" << endl;
-	file_system();
-	cout << endl;
-	cout << endl;
+        using x3::int_;
+        using x3::lit;
+        using x3::double_;
+        using x3::lexeme;
+        using ascii::char_;
 
-	system("pause");
-	return 0;
+        x3::rule<class employee, ast::employee> const employee = "employee";
+
+        auto const quoted_string = lexeme['"' >> +(char_ - '"') >> '"'];
+
+        auto const employee_def =
+            lit("employee")
+            >> '{'
+            >> int_ >> ','
+            >> quoted_string >> ','
+            >> quoted_string >> ','
+            >> double_
+            >> '}'
+            ;
+
+        BOOST_SPIRIT_DEFINE(employee);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////
+//  Main program
+////////////////////////////////////////////////////////////////////////////
+int
+main()
+{
+    std::cout << "/////////////////////////////////////////////////////////\n\n";
+    std::cout << "\t\tAn employee parser for Spirit...\n\n";
+    std::cout << "/////////////////////////////////////////////////////////\n\n";
+
+    std::cout
+        << "Give me an employee of the form :"
+        << "employee{age, \"forename\", \"surname\", salary } \n";
+    std::cout << "Type [q or Q] to quit\n\n";
+
+    using boost::spirit::x3::ascii::space;
+    typedef std::string::const_iterator iterator_type;
+    using client::parser::employee;
+
+    std::string str;
+    while (getline(std::cin, str))
+    {
+        if (str.empty() || str[0] == 'q' || str[0] == 'Q')
+            break;
+
+        client::ast::employee emp;
+        iterator_type iter = str.begin();
+        iterator_type const end = str.end();
+        bool r = phrase_parse(iter, end, employee, space, emp);
+
+        if (r && iter == end)
+        {
+            std::cout << boost::fusion::tuple_open('[');
+            std::cout << boost::fusion::tuple_close(']');
+            std::cout << boost::fusion::tuple_delimiter(", ");
+
+            std::cout << "-------------------------\n";
+            std::cout << "Parsing succeeded\n";
+            std::cout << "got: " << emp << std::endl;
+            std::cout << "\n-------------------------\n";
+        }
+        else
+        {
+            std::cout << "-------------------------\n";
+            std::cout << "Parsing failed\n";
+            std::cout << "-------------------------\n";
+        }
+    }
+
+    std::cout << "Bye... :-) \n\n";
+    return 0;
 }
